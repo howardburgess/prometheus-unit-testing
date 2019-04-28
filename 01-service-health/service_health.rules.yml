@@ -1,0 +1,9 @@
+groups:
+- name: service_health
+  rules:
+  - alert: ServiceDown
+    expr: up == 0
+    labels:
+      severity: minor
+    annotations:
+      description: 'Service {{.Labels.instance}} is down'

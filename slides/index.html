@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Prometheus Unit Testing</title>
+    <link rel="shortcut icon" href="favicon.ico">
+
+    <link rel="stylesheet" href="/revealjs/css/reveal.css">
+    <link rel="stylesheet" href="/revealjs/css/theme/solarized.css" id="theme">
+
+    <link rel="stylesheet" href="/highlightjs/styles/tomorrow-night-eighties.css">
+    <link rel="stylesheet" href="/highlightjs/styles/tomorrow-night-eighties.min.css">
+    <style>
+        mark {
+            background-color: inherit;
+            border: 1px solid #ffff00;
+        }
+        .reveal .footer {
+            position: absolute;
+            bottom: 0.5em;
+            left: 1em;
+            font-size: 0.3em;
+            z-index: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="reveal">
+        <div class="slides">
+            <section data-markdown data-separator="^\n---\n$" data-separator-vertical="^\n--\n$">
+                <textarea data-template>
+# Prometheus Unit Testing
+
+Howard Burgess, Core Engineering
+
+---
+
+## Prometheus
+### Scraping
+
+* Apps expose their metrics at `/metrics`
+
+```json
+# TYPE http_requests counter
+http_requests{path="/login",http_code="200"} 657428
+http_requests{path="/login",http_code="500"} 29
+# TYPE cpu_temperature gauge
+cpu_temperature{cpu="3"} 47.1 
+```
+
+* Prometheus scrapes metrics and ingests them
+* `scrape_interval` (default `1m`)
+
+Note:
+* Prometheus is a monitoring system and time series database
+* Various exporters (e.g. Kafka, Node Exporter)
+* Multidimentional data model (labels)
+* `/metrics` endpoint is configurable in Prometheus
+* Service discovery to find targets to scrape (e.g. Kubernetes)
+* No evaluation happens at scrape time
+
+--
+
+## Prometheus
+### Rule evaluation
+
+* Prometheus evaluates PromQL rules and alerts
+* Recording rules precompute queries for reuse
+* Alerting rules trigger alerts for unusual behaviour
+* Alerts are sent to [Alertmanager](https://prometheus.io/docs/alerting/alertmanager/)
+* `evaluation_interval` (default `1m`)
+
+Note:
+* PromQL query language
+* Recording rules generate additional time series
+* Alertmanager groups and rate-limits alerts, then sends them to e.g. Slack
+* We can unit test recording rules and alerts
+
+---
+
+## Evaluation of a simple alert
+
+### Alert rule
+```yaml
+- alert: ServiceDown
+  expr: up == 0
+  labels:
+    severity: minor
+  annotations:
+    description: 'Service {{.Labels.instance}} is down'
+```
+
+Note:
+* `up` is a built-in time series indicating that a target was successfully scraped
+* All labels from `up` are available, plus any specified in `labels:` section
+* In reality you'd use `for 5m` to guard against e.g. missed scrape
+
+--
+
+## Evaluation of a simple alert
+
+### Collected metrics at time _`t`_
+
+```json
+up{instance="10.0.0.1",job="sample-app"} 1
+up{instance="10.0.0.2",job="sample-app"} 0
+up{instance="10.0.0.3",job="sample-app"} 0
+```
+
+### Synthetic time series generated
+
+```json
+ALERTS{alertname="ServiceDown",alertstate="firing",instance="10.0.0.2",job="sample-app"} 1
+ALERTS{alertname="ServiceDown",alertstate="firing",instance="10.0.0.3",job="sample-app"} 1
+```
+
+--
+
+## Evaluation of a simple alert
+
+### Prometheus sends alert to Alertmanager
+
+```json
+[
+  {
+    "status": "firing",
+    "labels": {
+       "alertname": "ServiceDown",
+       "instance": "10.0.0.2",
+       "job": "sample-app",
+       "severity": "minor"
+     },
+     "annotations": {
+        "description": "Service 10.0.0.2 is down"
+      }
+  },
+  {
+    "status": "firing",
+    "labels": {
+       "alertname": "ServiceDown",
+       "instance": "10.0.0.3",
+       "job": "sample-app",
+       "severity": "minor"
+     },
+     "annotations": {
+        "description": "Service 10.0.0.3 is down"
+      }
+  }
+]
+```
+
+Note:
+* Prometheus sends the alert to Alertmanager at every evaluation interval
+* Alertmanager will rate-limit the delivery of alerts to e.g. Slack
+* Testing was difficult before officially supported. Lack of confidence in alerts.
+
+---
+
+## How did people test before?
+
+### One approach
+* Use WireMock to simulate scrape targets
+  - Inject responses for the `/metrics` endpoint
+  - Prometheus scrapes it and evaluates rules
+  - Query Prometheus for `ALERTS{alertname=...}`
+
+Note:
+* Problem: can't inject historical data into Prometheus
+* Prometheus needs to scrape frequently (e.g. `1s`) otherwise tests take ages
+* Con: Can't test rules with `for Xm` clauses (has to be real-time)
+* Con: Not very precise - depends on exactly when scrapes/evaluations happen
+
+--
+
+## How did people test before?
+
+### Another approach
+* Use another time series database
+  - Insert historical metrics into InfluxDB
+  - Configure Prometheus to `remote_read` from it
+  - Prometheus doesn't scrape; only evaluates rules
+  - Query Prometheus for `ALERTS{alertname=...}`
+
+Note:
+* Con: More moving parts - InfluxDB query language
+* Con: Not very precise - depends on exactly when evaluations happen
+* Pro: Can test rules with `for Xm` clauses
+
+---
+
+## Prometheus [2.5.0](https://github.com/prometheus/prometheus/releases/tag/v2.5.0)
+
+Unit testing framework introduced
+
+Add samples to the time series database
+```yaml
+- interval: 1m
+  input_series:
+  - series: up{instance="10.0.0.1"}
+    values: 1  0  1  0  0  1
+    #       0m 1m 2m 3m 4m 5m
+```
+
+Evaluate rules at a point in time
+```yaml
+alert_rule_test:
+- alertname: ServiceDown
+  eval_time: 5m
+```
+
+Note:
+* No scraping involved
+* Times are precise. No interpolation
+* Very fast
+
+--
+
+## How to run
+It's part of `promtool`
+
+```bash
+$ promtool test rules *.test.yml
+```
+
+Or use Docker
+```bash
+$ docker run -v $PWD:/data:ro --entrypoint sh prom/prometheus \
+             -c 'promtool test rules /data/*.test.yml'
+```
+
+Note:
+* `promtool` is also used to:
+  - check config and rules files for syntax
+  - run queries
+  - output debug information
+
+---
+
+## A more complex alert
+
+<pre><code data-trim data-noescape class="stretch lang-yaml">
+- alert: IceCreamStockLow
+  expr: temperature_c{area="outside"} > 25
+        and on (shop)
+        stock_level{item="ice-cream"} < 5
+  for: 5m
+  labels:
+    severity: major
+  annotations:
+    description: >
+    Low on ice cream at the {{.Labels.shop}} shop and
+    it is {{.Value | printf "%.1f"}}C {{.Labels.area}}
+</code></pre>
+
+We're expecting alerts like:
+
+"Low on ice cream at the Cardiff shop and it is 26.3C outside"
+
+Note:
+* Will alert for all `shop`s
+* Combining two time series that have different labels on `shop` only
+* Actual time series would probably have more labels
+* With [logical operators](https://prometheus.io/docs/prometheus/latest/querying/operators/#logical-set-binary-operators)
+  the values for the whole expression come from the left hand side
+
+--
+
+<pre><code data-trim data-noescape class="stretch lang-yaml">
+evaluation_interval: 1m
+rule_files:
+- ice-cream.rules.yml
+
+tests:
+- interval: 1m
+  input_series:
+  - series: stock_level{item="ice-cream",shop="Birmingham"}
+    values: 2 2 2 2 2 2
+  - series: stock_level{item="ice-cream",shop="London"}
+    values: 4 4 4 4 4 4
+  - series: temperature_c{area="outside",shop="Birmingham"}
+    values: 23.98 23.98 23.98 23.98 23.98 23.98
+  - series: temperature_c{area="outside",shop="London"}
+    values: 28.75+1x5 # 28.75 29.75 30.75 31.75 32.75
+  alert_rule_test:
+  - alertname: IceCreamStockLow
+    eval_time: 5m
+    exp_alerts:
+    - exp_labels:
+        area: outside
+        severity: major
+        shop: London
+      exp_annotations:
+        description: Low on ice cream at the London shop and it is 33.8C outside
+</code></pre>
+
+Note:
+* `rule_files` are relative to where `promtool` was run (not to the location of the test file)
+* `interval` is the interval for the sample values. Doesn't have to match `evaluation_interval` 
+* Compact form to express sample values
+* Gotcha: not providing enough samples to cover the `evaluation_time`
+
+--
+
+## Test output
+```bash
+$ promtool test rules *.test.yml
+Unit Testing:  ice-cream.rules.test.yml
+  SUCCESS
+```
+
+### Errors
+If rule had temperature `>20` instead of `>25`
+
+```bash
+$ promtool test rules *.test.yml
+Unit Testing:  ice-cream.rules.test.yml
+  FAILED:
+    alertname:IceCreamStockLow, time:5m0s,
+        exp:"[Labels:{alertname=\"IceCreamStockLow\", area=\"outside\", severity=\"major\", shop=\"London\"} Annotations:{description=\"Low on ice cream at the London shop and it is 33.8C outside\"}]",
+
+        got:"[Labels:{alertname=\"IceCreamStockLow\", area=\"outside\", severity=\"major\", shop=\"Birmingham\"} Annotations:{description=\"Low on ice cream at the Birmingham shop and it is 24.0C outside\"},
+              Labels:{alertname=\"IceCreamStockLow\", area=\"outside\", severity=\"major\", shop=\"London\"} Annotations:{description=\"Low on ice cream at the London shop and it is 33.8C outside\"}]"
+```
+
+--
+
+## Negative tests
+
+<pre><code data-trim data-noescape class="stretch lang-yaml">
+# Doesn't fire if stock levels are high enough
+- interval: 1m
+  input_series:
+  - series: stock_level{item="ice-cream",shop="London"}
+    values: <mark>5+0x5 # 5 5 5 5 5 5</mark>
+  - series: temperature_c{area="outside",shop="London"}
+    values: 25.1+0x5 # 25.1 25.1 25.1 25.1 25.1 25.1
+  alert_rule_test:
+  - alertname: IceCreamStockLow
+    eval_time: 5m
+    exp_alerts: <mark>[]</mark>
+</code></pre>
+
+--
+
+## Negative tests
+
+<pre><code data-trim data-noescape class="stretch lang-yaml">
+# Doesn't fire for other products
+- interval: 1m
+  input_series:
+  - series: stock_level{<mark>item="hot-chocolate"</mark>,shop="London"}
+    values: 4+0x4 # 4 4 4 4 4 4
+  - series: temperature_c{area="outside",shop="London"}
+    values: 25.1+0x5 # 25.1 25.1 25.1 25.1 25.1 25.1
+  alert_rule_test:
+  - alertname: IceCreamStockLow
+    eval_time: 5m
+    exp_alerts: <mark>[]</mark>
+</code></pre>
+
+--
+
+## Negative tests
+
+<pre><code data-trim data-noescape class="stretch lang-yaml">
+# Doesn't fire if temperature reduces within 5m
+- interval: 1m
+  input_series:
+  - series: stock_level{item="ice-cream",shop="London"}
+    values: 4+0x5 # 4 4 4 4 4 4
+  - series: temperature_c{area="outside",shop="London"}
+    values: 25.1+0x4 <mark>-0.1</mark> # 25.1 25.1 25.1 25.1 25.1 25.0
+  alert_rule_test:
+  - alertname: IceCreamStockLow
+    eval_time: 5m
+    exp_alerts: <mark>[]</mark>
+</code></pre>
+
+---
+
+## Testing rate()
+
+`rate()` computes the per-second rate of the metric.
+
+```yaml
+- alert: HighDiskIO
+  expr: sum by (device) (rate(node_disk_reads_completed_total[2m])) > 1000
+  labels:
+    severity: minor
+  annotations:
+    description: 'High I/O on {{.Labels.device}}: {{.Value | printf "%.0f"}} reads/sec'
+```
+We're expecting alerts like:
+
+"High I/O on sda: 2400 reads/sec"
+
+Note:
+* Use `printf` because with interpolation values could be fractional
+
+--
+
+### Sample interval `1m`
+`rate()` is always per-second, so must multiply values by 60
+
+<pre><code data-trim data-noescape class="stretch lang-yaml">
+evaluation_interval: 1m
+rule_files:
+- disk-io.rules.yml
+
+tests:
+- interval: <mark>1m</mark>
+  input_series:
+  - series: node_disk_reads_completed_total{device="sda"}
+    values: <mark>0+74040x2</mark> # 1234/sec for a minute == 74040/min
+  alert_rule_test:
+  - alertname: HighDiskIO
+    eval_time: 2m
+    exp_alerts:
+    - exp_labels:
+        severity: minor
+        device: sda
+      exp_annotations:
+        description: 'High I/O on sda: <mark>1234</mark> reads/sec'
+
+--
+
+### Sample interval `1s`
+Per-second rates can be easier to work with
+
+<pre><code data-trim data-noescape class="lang-yaml">
+- interval: <mark>1s</mark>
+  input_series:
+  - series: node_disk_reads_completed_total{device="sda"}
+    # rising at 1001/sec for almost 2 mins, then at 10/sec for last second
+    values: 0+1001x119 +10
+  - series: node_disk_reads_completed_total{device="sdb"}
+    # rising at 1005/sec for 4 mins
+    values: 0+1005x240
+  - series: node_disk_reads_completed_total{device="sdc"}
+    # rising at 1000/sec for almost 4m, then 1200/sec for last second
+    values: 0+1000x239 +1200
+  alert_rule_test:
+  - alertname: HighDiskIO
+    eval_time: 2m
+    exp_alerts:
+    - exp_labels:
+        severity: minor
+        device: sdb
+      exp_annotations:
+        description: 'High I/O on sdb: 1005 reads/sec'
+  - alertname: HighDiskIO
+    eval_time: 4m
+    exp_alerts:
+    - exp_labels:
+        severity: minor
+        device: sdb
+      exp_annotations:
+        description: 'High I/O on sdb: 1005 reads/sec'
+    - exp_labels:
+        severity: minor
+        device: sdc
+      exp_annotations:
+        # Actual value without rounding is 1001.6666666666666
+        description: 'High I/O on sdc: 1002 reads/sec'<code></pre>
+
+---
+
+## Testing recording rules
+
+Consider metrics whose values are timestamps
+<pre><code data-trim data-noescape class="lang-yaml">
+job_completed_at{job="job-one"} 1514321353 # Tue 26 Dec 2017 20:49:13 GMT
+job_completed_at{job="job-two"} 1554321353 # Wed  3 Apr 2019 20:55:53 BST
+</code></pre>
+
+Record a new time series containing only those jobs that completed in the past two hours
+<pre><code data-trim data-noescape class="lang-yaml">
+rules:
+- record: job_completed_recently
+  expr: job_completed_at >= (time() - (2*60*60))
+</code></pre>
+
+How can we test it when we can't control the current time?
+
+--
+
+Value of `time()` increases from zero throughout the test
+
+<pre><code data-trim data-noescape class="stretch lang-yaml">
+evaluation_interval: 1h
+rule_files:
+- job_completion.rules.yml
+
+tests:
+- interval: 1h
+  input_series:
+  - series: job_completed_at{job="job-one"}
+    values: 0+0x3 # t=0h
+  - series: job_completed_at{job="job-two"}
+    values: 3600+0x3 # t=1h
+  promql_expr_test:
+  - expr: job_completed_recently
+    eval_time: 2h
+    exp_samples:
+    - labels: job_completed_recently{job="job-one"}
+      value: 0
+    - labels: job_completed_recently{job="job-two"}
+      value: 3600
+  - expr: job_completed_recently
+    eval_time: 3h
+    exp_samples:
+    - labels: job_completed_recently{job="job-two"}
+      value: 3600
+</code></pre>
+
+---
+
+# Test in Docker
+
+If you're not yet using Prometheus >=2.5.0, you can use a more recent version just for testing
+
+```dockerfile
+FROM prom/prometheus:v2.9.2
+
+WORKDIR /data
+COPY *.rules.yml .
+COPY *.rules.test.yml .
+
+RUN promtool test rules *.test.yml
+```
+
+Note:
+* Will only build successfully if tests pass
+
+--
+
+You can trigger the build from Gradle
+
+```gradle
+task testUsingRecentPrometheus(type:Exec) {
+    commandLine "docker", "build", "-t", "prometheus-test", "."
+}
+```
+
+---
+
+## Summary
+
+Advantages:
+* Repeatable unit tests with precise control
+* Very quick to run
+* Can test alerts that only fire after an extended time period
+
+But:
+* They are only unit tests
+* Only as good as the simulated metrics
+* Cannot pick up on changes in the _sources_ of metrics
+
+Note:
+* e.g. when [kube-state-metrics](https://github.com/kubernetes/kube-state-metrics) makes changes to metric names and labels
+                </textarea>                  
+            </section>
+        </div>
+
+        <div class="footer">
+            <a href="https://howardburgess.github.io/prometheus-unit-testing/">howardburgess.github.io/prometheus-unit-testing</a>
+        </div>              
+    </div>
+
+    <script src="/revealjs/js/reveal.js"></script>
+    <script>
+        Reveal.initialize({
+            controls: true,
+            controlsTutorial: false,
+            progress: true,
+            history: true,
+            center: false,
+            transition: 'fade', // none/fade/slide/convex/concave/zoom
+            transitionSpeed: 'fast', // default/fast/slow
+
+            width: "100%",
+        	height: "100%",
+        	margin: 0.05,
+
+            dependencies: [
+                { src: '/revealjs/plugin/markdown/marked.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+                { src: '/revealjs/plugin/markdown/markdown.js', condition: function() { return !!document.querySelector( '[data-markdown]' ); } },
+                { src: '/revealjs/plugin/highlight/highlight.js', async: true, callback: function() { hljs.initHighlightingOnLoad(); } },
+                { src: '/revealjs/plugin/notes/notes.js' }
+            ],
+
+            markdown: {
+		        smartypants: true
+	        }
+        });
+    </script>
+</body>
+</html>

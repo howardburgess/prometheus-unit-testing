@@ -1,0 +1,9 @@
+groups:
+- name: disk_io
+  rules:
+  - alert: HighDiskIO
+    expr: sum by (device) (rate(node_disk_reads_completed_total[2m])) > 1000
+    labels:
+      severity: minor
+    annotations:
+      description: 'High I/O on {{.Labels.device}}: {{.Value | printf "%.0f"}} reads/sec'

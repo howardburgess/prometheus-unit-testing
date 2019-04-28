@@ -1,0 +1,8 @@
+plugins {
+    id 'java'
+}
+
+task testUsingRecentPrometheus(type:Exec) {
+    commandLine "docker", "build", "-t", "prometheus-test", "."
+}
+check.dependsOn(testUsingRecentPrometheus)

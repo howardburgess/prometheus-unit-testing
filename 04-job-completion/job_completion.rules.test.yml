@@ -1,0 +1,24 @@
+evaluation_interval: 1h
+rule_files:
+- job_completion.rules.yml
+
+tests:
+- interval: 1h
+  input_series:
+  - series: job_completed_at{job="job-one"}
+    values: 0+0x3 # t=0h
+  - series: job_completed_at{job="job-two"}
+    values: 3600+0x3 # t=1h
+  promql_expr_test:
+  - expr: job_completed_recently
+    eval_time: 2h
+    exp_samples:
+    - labels: job_completed_recently{job="job-one"}
+      value: 0
+    - labels: job_completed_recently{job="job-two"}
+      value: 3600
+  - expr: job_completed_recently
+    eval_time: 3h
+    exp_samples:
+    - labels: job_completed_recently{job="job-two"}
+      value: 3600

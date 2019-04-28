@@ -1,0 +1,53 @@
+evaluation_interval: 1m
+rule_files:
+- disk-io.rules.yml
+
+tests:
+- interval: 1m
+  input_series:
+  - series: node_disk_reads_completed_total{device="sda"}
+    values: 0+74040x2 # 1234/sec for a minute == 74040/min
+  alert_rule_test:
+  - alertname: HighDiskIO
+    eval_time: 2m
+    exp_alerts:
+    - exp_labels:
+        severity: minor
+        device: sda
+      exp_annotations:
+        description: 'High I/O on sda: 1234 reads/sec'
+
+- interval: 1s
+  input_series:
+  - series: node_disk_reads_completed_total{device="sda"}
+    # rising at 1001/sec for almost 2 mins, then at 10/sec for last second
+    values: 0+1001x119 +10
+  - series: node_disk_reads_completed_total{device="sdb"}
+    # rising at 1005/sec for 4 mins
+    values: 0+1005x240
+  - series: node_disk_reads_completed_total{device="sdc"}
+    # rising at 1000/sec for almost 4m, then 1200/sec for last second
+    values: 0+1000x239 +1200
+  alert_rule_test:
+  - alertname: HighDiskIO
+    eval_time: 2m
+    exp_alerts:
+    - exp_labels:
+        severity: minor
+        device: sdb
+      exp_annotations:
+        description: 'High I/O on sdb: 1005 reads/sec'
+  - alertname: HighDiskIO
+    eval_time: 4m
+    exp_alerts:
+    - exp_labels:
+        severity: minor
+        device: sdb
+      exp_annotations:
+        description: 'High I/O on sdb: 1005 reads/sec'
+    - exp_labels:
+        severity: minor
+        device: sdc
+      exp_annotations:
+        # Actual value without rounding is 1001.6666666666666
+        description: 'High I/O on sdc: 1002 reads/sec'

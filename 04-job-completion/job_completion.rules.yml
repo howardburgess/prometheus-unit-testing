@@ -1,0 +1,5 @@
+groups:
+- name: job_completion
+  rules:
+  - record: job_completed_recently
+    expr: job_completed_at >= (time() - (2*60*60))

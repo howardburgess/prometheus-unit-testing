@@ -1,0 +1,14 @@
+groups:
+- name: ice_cream
+  rules:
+  - alert: IceCreamStockLow
+    expr: temperature_c{area="outside"} > 25
+          and on (shop)
+          stock_level{item="ice-cream"} < 5
+    for: 5m
+    labels:
+      severity: major
+    annotations:
+      description: >
+        Low on ice cream at the {{.Labels.shop}} shop and
+        it is {{.Value | printf "%.1f"}}C {{.Labels.area}}

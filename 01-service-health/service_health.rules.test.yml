@@ -1,0 +1,18 @@
+evaluation_interval: 1m
+rule_files:
+- service_health.rules.yml
+
+tests:
+- interval: 1m
+  input_series:
+  - series: up{instance="10.0.0.1"}
+    values: 0
+  alert_rule_test:
+  - alertname: ServiceDown
+    eval_time: 0m
+    exp_alerts:
+    - exp_labels:
+        instance: 10.0.0.1
+        severity: minor
+      exp_annotations:
+        description: 'Service 10.0.0.1 is down'

@@ -1,0 +1,61 @@
+evaluation_interval: 1m
+rule_files:
+- ice-cream.rules.yml
+
+tests:
+- interval: 1m
+  input_series:
+  - series: stock_level{item="ice-cream",shop="Birmingham"}
+    values: 2 2 2 2 2 2
+  - series: stock_level{item="ice-cream",shop="London"}
+    values: 4 4 4 4 4 4
+  - series: temperature_c{area="outside",shop="Birmingham"}
+    values: 23.98 23.98 23.98 23.98 23.98 23.98
+  - series: temperature_c{area="outside",shop="London"}
+    values: 28.75+1x5 # 28.75 29.75 30.75 31.75 32.75
+  alert_rule_test:
+  - alertname: IceCreamStockLow
+    eval_time: 5m
+    exp_alerts:
+    - exp_labels:
+        area: outside
+        severity: major
+        shop: London
+      exp_annotations:
+        description: Low on ice cream at the London shop and it is 33.8C outside
+
+# Doesn't fire if stock levels are high enough
+- interval: 1m
+  input_series:
+  - series: stock_level{item="ice-cream",shop="London"}
+    values: 5+0x5 # 5 5 5 5 5 5
+  - series: temperature_c{area="outside",shop="London"}
+    values: 25.1+0x5 # 25.1 25.1 25.1 25.1 25.1 25.1
+  alert_rule_test:
+  - alertname: IceCreamStockLow
+    eval_time: 5m
+    exp_alerts: []
+
+# Doesn't fire for other products
+- interval: 1m
+  input_series:
+  - series: stock_level{item="hot-chocolate",shop="London"}
+    values: 4+0x4 # 4 4 4 4 4 4
+  - series: temperature_c{area="outside",shop="London"}
+    values: 25.1+0x5 # 25.1 25.1 25.1 25.1 25.1 25.1
+  alert_rule_test:
+  - alertname: IceCreamStockLow
+    eval_time: 5m
+    exp_alerts: []
+
+# Doesn't fire if temperature reduces within 5m
+- interval: 1m
+  input_series:
+  - series: stock_level{item="ice-cream",shop="London"}
+    values: 4+0x5 # 4 4 4 4 4 4
+  - series: temperature_c{area="outside",shop="London"}
+    values: 25.1+0x4 -0.1 # 25.1 25.1 25.1 25.1 25.1 25.0
+  alert_rule_test:
+  - alertname: IceCreamStockLow
+    eval_time: 5m
+    exp_alerts: []
