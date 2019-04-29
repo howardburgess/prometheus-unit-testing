@@ -54,7 +54,7 @@ tests:
   - series: stock_level{item="ice-cream",shop="London"}
     values: 4+0x5 # 4 4 4 4 4 4
   - series: temperature_c{area="outside",shop="London"}
-    values: 25.1+0x4 -0.1 # 25.1 25.1 25.1 25.1 25.1 25.0
+    values: 25.1+0x4 25 # 25.1 25.1 25.1 25.1 25.1 25
   alert_rule_test:
   - alertname: IceCreamStockLow
     eval_time: 5m

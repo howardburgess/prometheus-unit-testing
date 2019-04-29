@@ -371,7 +371,7 @@ Unit Testing:  ice-cream.rules.test.yml
   - series: stock_level{item="ice-cream",shop="London"}
     values: 4+0x5 # 4 4 4 4 4 4
   - series: temperature_c{area="outside",shop="London"}
-    values: 25.1+0x4 <mark>-0.1</mark> # 25.1 25.1 25.1 25.1 25.1 25.0
+    values: 25.1+0x4 <mark>25</mark> # 25.1 25.1 25.1 25.1 25.1 250
   alert_rule_test:
   - alertname: IceCreamStockLow
     eval_time: 5m
