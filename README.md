@@ -8,7 +8,7 @@ This presentation explores some of its features by way of examples. Created with
 
 ```bash
 git clone https://github.com/howardburgess/prometheus-unit-testing && \
-cd prometheus-unit-testing/slides && \
+cd prometheus-unit-testing && \
 docker build -t prom-test . && \
 docker run -p 8080:80 prom-test
 ```
@@ -27,4 +27,3 @@ docker run -p 8080:80 -v $PWD:/content prom-test
 ## View online
 
 [howardburgess.github.io/prometheus-unit-testing/](https://howardburgess.github.io/prometheus-unit-testing/).
-Speaker notes do not work here, because the CDN delivers a reveal.js HTML file as `Content-Type: text/plain`.
