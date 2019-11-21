@@ -1,10 +1,109 @@
-## Master
+## Version 9.16.2
 
 New languages:
+  none.
 
 New styles:
+  none.
 
 Improvements:
+- fix(arduino) Resolves issue with arduino.js not being "use strict" safe
+
+
+## Version 9.16.1
+
+New languages:
+  none.
+
+New styles:
+- *Night Owl* by [Carl Baxter][]
+
+Improvements:
+- Add CLI tool to quickly check for relevance conflicts [Mark Ellis][] (#1554)
+- enhance(twig) update list of filter and tags (#2090)
+- fix(crystal): correctly highlight `!~` method definition (#2222)
+- fix dropping characters if we choke up on a 0-width match (#2219)
+- (accesslog) improve accesslog relevancy scoring (#2172)
+- fix(shell): fix parsing of prompts with forward slash (#2218)
+- improve parser to properly support look-ahead regex in begin matchers (#2135)
+- blacklist super-common keywords from having relevance (#2179)
+- fix(swift): support for `@dynamicMemberLookup` and `@propertyWrapper` (#2202)
+- fix: `endWithParent` inside `starts` now always works (#2201)
+- fix(typescript): constructor in declaration doesn't break highlighting
+- fix(typescript): only match function keyword as a separate identifier (#2191)
+- feature(arduino) make arduino a super-set of cpp grammar
+- fix(javascript): fix object attributes immediately following line comments
+- fix(xml): remove `vbscript` as potential script tag subLanguage
+- fix(Elixir): improve regex for numbers
+- fix(YAML): improve matching for keys, blocks and numbers
+- fix(Pony): improve regex for numbers
+- fix(handlebars): add support for raw-blocks, and triple-mustaches(#2175)
+- fix(handlebars): fix parsing of block-comments containing closing mustaches (#2175)
+- fix(handlebars): add support for segment-literal notation, and escaped mustaches (#2184)
+- JSON: support for comments in JSON (#2016)
+- fix(cpp): improve string literal matching
+- fix(highlight.js): omit empty span-tags in the output (#2182)
+- fix(Go): improve function declaration matching
+- fix(python): added support for f-string literal curly braces (#2195)
+- fix(cpp): add `future` built-in (#1610)
+- fix(python): support comments within function parameters (#2214)
+
+[Carl Baxter]: https://github.com/cdbax
+[Mark Ellis]: https://github.com/ellismarkf
+
+## Version 9.15.10
+New languages:
+  none.
+New styles:
+  none.
+Improvements:
+  - support for ruby's squiggly heredoc (#2049)
+  - support css custom properties (#2082)
+  - fix(PureBASIC): update to 5.60 (#1508)
+  - fix(Kotlin): parenthesized types in function declaration (#2107)
+  - fix(Kotlin): nested comment (#2104)
+  - fix(isbl): contains key typo (#2103)
+  - fix(github-gist.css): match Github styles (#2100)
+  - fix(elm): update to latest elm syntax (#2088)
+  - fix: Support highlighting inline HTML and CSS tagged template strings in JS and TS (#2105)
+  - feat(YAML): add YAML to common languages (#1952)
+  - feat(xml): Add support for Windows Script File (.wsf), inline VBScript in XML `script` tags (#1690)
+
+## Version 9.15.9
+
+Improvements:
+ - fix(AutoHotkey): order and extended highlighting (#1579)
+ - fix(Go): correctly highlight hex numbers, rather than stopping at last 'd' or 'f'. (#2060)
+ - fix(Mathematica): Improvements to language (#2065)
+ - fix(Node): Adds SCSS build (#2079)
+ - fix(Rust): update keywords (#2052)
+ - fix(Stata): Added keywords for the meta-analysis suite introduced in Stata 16 (#2081)
+ - fix(Bash): escape double quotes (#2048)
+
+## Version 9.15.8
+
+New languages:
+  none.
+New styles:
+  none.
+Improvements:
+  - fix(bash): revert escaped double quotes - broke Firefox/Safari.
+
+## Version 9.15.7
+New languages:
+  none.
+New styles:
+  none.
+Improvements:
+ - fix(powershell): Add cmdlets (#2022)
+ - fix(Bash): escaped double quotes (#2041)
+ - fix(c++): add aliases 'hh', 'hxx', 'cxx' (#2017)
+ - fix(ini/toml): Support comments on the same line. (#2039)
+ - fix(JSX): not rendering well in a function without parentheses. (#2024)
+ - fix(LiveCode): language definition update (#2021)
+ - fix(markdown): indented lists (#2004)
+ - fix(styles/school-book): don't style all the pre, use .hljs instead (#2034)
+ - fix(JSX): Modify JSX tag detection to use XML language regex in place of simplistic \w+
 
 ## Version 9.15.6
 New languages:
